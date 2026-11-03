@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PodLens — YouTube Podcast Audience Insights</title>
+<link rel="stylesheet" href="css/styles.css?v=3" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<header class="site-header">
+  <div class="container header-inner">
+    <div class="brand">
+      <span class="brand-mark">PodLens</span>
+      <span class="brand-tag">Intelligent YouTube Podcast Analyzer</span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- A. Home / URL Input -->
+  <section id="view-home" class="view">
+    <div class="intro">
+      <h1>Understand your podcast audience</h1>
+      <p>
+        Paste a YouTube podcast video URL. PodLens collects the comments,
+        filters out spam, analyzes sentiment, highlights the comments that
+        matter most, and summarizes audience reaction and future topic ideas.
+      </p>
+    </div>
+
+    <form id="analyze-form" class="analyze-form" autocomplete="off">
+      <input
+        id="url-input"
+        type="text"
+        name="url"
+        placeholder="https://www.youtube.com/watch?v=..."
+        aria-label="YouTube podcast video URL"
+        required
+      />
+      <button type="submit" id="analyze-btn">Analyze</button>
+    </form>
+    <p id="form-error" class="error-text" role="alert" hidden></p>
+
+    <div id="status-panel" class="status-panel" style="display: none;" hidden>
+      <div class="spinner" aria-hidden="true"></div>
+      <div>
+        <p id="status-text">Starting analysis…</p>
+        <p id="status-warnings" class="warnings-text"></p>
+      </div>
+    </div>
+
+    <!-- History Panel Section -->
+    <div class="history-section">
+      <button type="button" id="history-toggle-btn" class="history-toggle-btn" aria-expanded="true">
+        <span id="history-toggle-icon">▼</span> ANALYSIS HISTORY
+      </button>
+      <div id="history-panel" class="history-panel">
+        <div id="history-list" class="history-list"></div>
+        <p id="history-empty" class="muted history-empty" hidden>No analyzed videos in database yet.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- B. Analysis Dashboard -->
+  <section id="view-dashboard" class="view" hidden>
+    <div class="dashboard-header">
+      <div>
+        <h2 id="video-title">Video title</h2>
+        <p id="video-meta" class="muted"></p>
+      </div>
+      <button id="new-analysis-btn" class="secondary-btn">Analyze another video</button>
+    </div>
+
+    <p id="dashboard-warnings" class="warnings-text"></p>
+
+    <div class="stat-cards">
+      <div class="stat-card">
+        <span class="stat-value" id="stat-total-comments">0</span>
+        <span class="stat-label">Comments collected</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" id="stat-spam-count">0</span>
+        <span class="stat-label" id="stat-spam-label">Spam comments</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" id="stat-analyzed-count">0</span>
+        <span class="stat-label">Analyzed for sentiment</span>
+      </div>
+    </div>
+
+    <div class="dashboard-grid">
+      <div class="panel">
+        <h3>Sentiment distribution</h3>
+        <canvas id="sentiment-chart" height="220"></canvas>
+      </div>
+
+      <div class="panel">
+        <h3>Audience reaction summary</h3>
+        <div id="audience-summary" class="insight-body">
+          <p class="muted">No summary available yet.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Suggested future topics</h3>
+        <ul id="future-topics" class="topic-list"></ul>
+      </div>
+
+      <div class="panel panel-wide">
+        <h3>Important audience comments</h3>
+        <ul id="important-comments" class="comment-list"></ul>
+      </div>
+    </div>
+
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="comments">Comments</button>
+      <button class="tab-btn" data-tab="report">Full report</button>
+    </nav>
+
+    <!-- C. Comments Section -->
+    <section id="tab-comments" class="tab-panel">
+      <div class="comments-toolbar">
+        <input type="search" id="comment-search" placeholder="Search comments…" />
+        <select id="filter-spam">
+          <option value="">All comments</option>
+          <option value="not_spam">Not spam</option>
+          <option value="spam">Spam</option>
+        </select>
+        <select id="filter-sentiment">
+          <option value="">Any sentiment</option>
+          <option value="positive">Positive</option>
+          <option value="negative">Negative</option>
+          <option value="neutral">Neutral</option>
+        </select>
+      </div>
+
+      <table class="comments-table">
+        <thead>
+          <tr>
+            <th>Comment</th>
+            <th>Likes</th>
+            <th>Spam</th>
+            <th>Sentiment</th>
+          </tr>
+        </thead>
+        <tbody id="comments-tbody"></tbody>
+      </table>
+
+      <div class="pagination">
+        <button id="prev-page-btn" class="secondary-btn">Previous</button>
+        <span id="page-indicator">Page 1</span>
+        <button id="next-page-btn" class="secondary-btn">Next</button>
+      </div>
+    </section>
+
+    <!-- D. Analysis Report -->
+    <section id="tab-report" class="tab-panel" hidden>
+      <div id="report-content" class="report-content"></div>
+    </section>
+  </section>
+
+</main>
+
+<script src="js/api.js?v=3"></script>
+<script src="js/dashboard.js?v=3"></script>
+<script src="js/comments.js?v=3"></script>
+<script src="js/report.js?v=3"></script>
+<script src="js/app.js?v=3"></script>
+</body>
+</html>
