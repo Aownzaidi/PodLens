@@ -37,8 +37,9 @@ const PodLensReport = (() => {
       ? data.insights.discussion_themes.map((t) => `<li>${esc(t)}</li>`).join("")
       : '<li class="muted">None available.</li>';
 
-    const topicsHtml = data.insights.future_topics && data.insights.future_topics.length
-      ? data.insights.future_topics.map((t) => `<li>${esc(t)}</li>`).join("")
+    const futureTopics = (data.insights.future_topics || []).slice(0, 5);
+    const topicsHtml = futureTopics.length
+      ? futureTopics.map((t) => `<li>${esc(t)}</li>`).join("")
       : '<li class="muted">None available.</li>';
 
     const summaryHtml = data.insights.status === "available" && data.insights.audience_summary

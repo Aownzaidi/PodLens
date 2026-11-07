@@ -17,6 +17,7 @@ from app.core.exceptions import (
     InvalidYouTubeUrlError,
     ModelInferenceError,
     ModelNotAvailableError,
+    NotAPodcastError,
     VideoNotFoundError,
     YouTubeApiError,
     YouTubeApiNotConfiguredError,
@@ -145,41 +146,124 @@ class AnalysisPipeline:
 
             # 4. Check if NO new or edited comments were detected:
             if len(comments_needing_inference) == 0 and previous_analysis is not None:
-                logger.info(
-                    "No new or edited comments detected for video %s. Reusing previous analysis %s.",
-                    video_id,
-                    previous_analysis.id,
-                )
-                prev_warnings = (
-                    json.loads(previous_analysis.warnings) if previous_analysis.warnings else []
-                )
-                combined_warnings = list(
-                    dict.fromkeys(
-                        warnings
-                        + prev_warnings
-                        + ["No new or edited comments detected; reused saved analysis."]
+                needs_insights = (
+                    self._llm.is_configured()
+                    and (
+                        previous_analysis.insights_status != "available"
+                        or not previous_analysis.audience_summary
                     )
+                )
+
+                if not needs_insights:
+                    logger.info(
+                        "No new or edited comments detected for video %s. Reusing previous analysis %s.",
+                        video_id,
+                        previous_analysis.id,
+                    )
+                    prev_warnings = (
+                        json.loads(previous_analysis.warnings) if previous_analysis.warnings else []
+                    )
+                    combined_warnings = list(
+                        dict.fromkeys(
+                            warnings
+                            + prev_warnings
+                            + ["No new or edited comments detected; reused saved analysis."]
+                        )
+                    )
+                    prev_important_ids = (
+                        json.loads(previous_analysis.important_comment_ids)
+                        if previous_analysis.important_comment_ids
+                        else []
+                    )
+                    prev_themes = (
+                        json.loads(previous_analysis.discussion_themes)
+                        if previous_analysis.discussion_themes
+                        else []
+                    )
+                    prev_topics = (
+                        json.loads(previous_analysis.future_topics)
+                        if previous_analysis.future_topics
+                        else []
+                    )
+
+                    repository.finalize_analysis_result(
+                        db,
+                        analysis,
+                        status=previous_analysis.status,
+                        total_comments_collected=total_collected,
+                        total_comments_analyzed=previous_analysis.total_comments_analyzed,
+                        spam_count=previous_analysis.spam_count,
+                        spam_percentage=previous_analysis.spam_percentage,
+                        positive_count=previous_analysis.positive_count,
+                        negative_count=previous_analysis.negative_count,
+                        neutral_count=previous_analysis.neutral_count,
+                        important_comment_ids=prev_important_ids,
+                        audience_summary=previous_analysis.audience_summary,
+                        discussion_themes=prev_themes,
+                        future_topics=prev_topics,
+                        insights_status=previous_analysis.insights_status or "unavailable",
+                        insights_error=previous_analysis.insights_error,
+                        warnings=combined_warnings,
+                    )
+                    db.commit()
+                    return
+
+                # If previous run missed LLM insights (e.g. key was not set) but LLM is now configured,
+                # generate insights directly without re-running ML models
+                logger.info(
+                    "Generating missing LLM insights for video %s without re-running ML models.",
+                    video_id,
+                )
+                repository.update_analysis_status(
+                    db, analysis, AnalysisStatus.GENERATING_INSIGHTS, current_stage="generating_insights"
+                )
+                db.commit()
+
+                all_non_spam = [c for c in all_video_comments if c.analysis and c.analysis.is_spam is False]
+                insight_input = [
+                    AnalyzedCommentForInsights(
+                        text=comment.original_text,
+                        like_count=comment.like_count,
+                        sentiment=(
+                            comment.analysis.sentiment_label.value
+                            if comment.analysis and comment.analysis.sentiment_label
+                            else None
+                        ),
+                        is_spam=False,
+                        is_important=comment.analysis.is_important if comment.analysis else False,
+                    )
+                    for comment in all_non_spam
+                ]
+
+                outcome = generate_audience_insights(
+                    self._llm,
+                    video.title,
+                    insight_input,
+                    {
+                        "positive": previous_analysis.positive_count,
+                        "negative": previous_analysis.negative_count,
+                        "neutral": previous_analysis.neutral_count,
+                    },
+                )
+
+                if outcome.status == "failed":
+                    warnings.append(f"Audience insight generation failed: {outcome.error}")
+                elif outcome.status == "unavailable":
+                    warnings.append(f"Audience insights unavailable: {outcome.error}")
+
+                final_status = (
+                    AnalysisStatus.COMPLETED if outcome.status == "available" else AnalysisStatus.PARTIAL
                 )
                 prev_important_ids = (
                     json.loads(previous_analysis.important_comment_ids)
                     if previous_analysis.important_comment_ids
                     else []
                 )
-                prev_themes = (
-                    json.loads(previous_analysis.discussion_themes)
-                    if previous_analysis.discussion_themes
-                    else []
-                )
-                prev_topics = (
-                    json.loads(previous_analysis.future_topics)
-                    if previous_analysis.future_topics
-                    else []
-                )
 
                 repository.finalize_analysis_result(
                     db,
                     analysis,
-                    status=previous_analysis.status,
+                    status=final_status,
                     total_comments_collected=total_collected,
                     total_comments_analyzed=previous_analysis.total_comments_analyzed,
                     spam_count=previous_analysis.spam_count,
@@ -188,12 +272,12 @@ class AnalysisPipeline:
                     negative_count=previous_analysis.negative_count,
                     neutral_count=previous_analysis.neutral_count,
                     important_comment_ids=prev_important_ids,
-                    audience_summary=previous_analysis.audience_summary,
-                    discussion_themes=prev_themes,
-                    future_topics=prev_topics,
-                    insights_status=previous_analysis.insights_status or "unavailable",
-                    insights_error=previous_analysis.insights_error,
-                    warnings=combined_warnings,
+                    audience_summary=outcome.insights.audience_summary if outcome.insights else None,
+                    discussion_themes=outcome.insights.discussion_themes if outcome.insights else [],
+                    future_topics=outcome.insights.future_topics if outcome.insights else [],
+                    insights_status=outcome.status,
+                    insights_error=outcome.error,
+                    warnings=warnings + ["Generated audience insights using configured LLM."],
                 )
                 db.commit()
                 return
@@ -393,6 +477,7 @@ class AnalysisPipeline:
 
         except (
             InvalidYouTubeUrlError,
+            NotAPodcastError,
             YouTubeApiNotConfiguredError,
             YouTubeApiError,
             VideoNotFoundError,

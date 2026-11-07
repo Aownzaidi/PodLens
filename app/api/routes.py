@@ -103,6 +103,40 @@ def start_analysis(
             detail="YouTube API is not configured on the server (missing YOUTUBE_API_KEY).",
         )
 
+    # --- Podcast content validation -----------------------------------------
+    # Fetch video metadata and classify BEFORE creating any DB records or
+    # starting the background analysis task. This avoids wasted ML compute.
+    try:
+        from app.services.podcast_classifier import PodcastClassifierLLM, classify_podcast
+        youtube_service = YouTubeService(api_key=settings.youtube_api_key)
+        metadata = youtube_service.fetch_video_metadata(video_id)
+        classifier_llm = PodcastClassifierLLM(
+            api_key=settings.classifier_api_key,
+            model=settings.classifier_model,
+            api_base=settings.classifier_api_base,
+        )
+        classification = classify_podcast(metadata, classifier_llm)
+        if classification.label == "NOT_PODCAST":
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid Content: Please provide a YouTube podcast video URL.",
+            )
+        if classification.label == "UNCERTAIN":
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Unable to confirm this video is a podcast. "
+                    "Please provide a YouTube podcast, interview, or discussion video URL."
+                ),
+            )
+        # classification.label == "PODCAST" → proceed normally
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # If metadata fetch fails (private video, quota, network), surface it cleanly
+        logger.warning("Podcast validation failed for %s: %s", video_id, exc)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     # Create a placeholder video row if needed so we have something to attach
     # the analysis to immediately; youtube_service.collect() will refresh it.
     from app.models.database_models import AnalysisResult, AnalysisStatus, Video

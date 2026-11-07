@@ -8,7 +8,23 @@ const PodLensApi = (() => {
       let detail = `Request failed with status ${response.status}`;
       try {
         const body = await response.json();
-        if (body && body.detail) detail = body.detail;
+        if (body && body.detail) {
+          if (typeof body.detail === "string") {
+            detail = body.detail;
+          } else if (Array.isArray(body.detail)) {
+            detail = body.detail
+              .map((item) => {
+                if (typeof item === "string") return item;
+                if (item && item.msg) {
+                  return item.msg.replace(/^Value error,\s*/i, "");
+                }
+                return JSON.stringify(item);
+              })
+              .join("\n");
+          } else if (typeof body.detail === "object") {
+            detail = body.detail.msg || JSON.stringify(body.detail);
+          }
+        }
       } catch (_) {
         // ignore JSON parse failure, keep generic message
       }
