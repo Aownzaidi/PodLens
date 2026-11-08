@@ -16,11 +16,16 @@ class Settings(BaseSettings):
     youtube_api_key: Optional[str] = None
     max_comments_per_video: int = 200
 
-    # LLM
+    # LLM — audience summary + future topic suggestions
     llm_provider: str = "openai"
     llm_api_key: Optional[str] = None
     llm_model: str = "gpt-4o-mini"
     llm_api_base: Optional[str] = None
+
+    # Podcast classifier LLM — separate key/model used ONLY for content classification
+    classifier_api_key: Optional[str] = None
+    classifier_model: str = "openai/gpt-oss-120b"
+    classifier_api_base: Optional[str] = "https://api.groq.com/openai/v1"
 
     # Database
     database_url: str = "sqlite:///./podlens.db"
@@ -63,6 +68,10 @@ class Settings(BaseSettings):
     @property
     def llm_configured(self) -> bool:
         return bool(self.llm_api_key and self.llm_api_key.strip())
+
+    @property
+    def classifier_configured(self) -> bool:
+        return bool(self.classifier_api_key and self.classifier_api_key.strip())
 
 
 @lru_cache

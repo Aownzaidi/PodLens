@@ -49,3 +49,7 @@ class LLMRequestError(PodLensError):
 
 class AnalysisNotFoundError(PodLensError):
     """Raised when a requested analysis id does not exist."""
+
+
+class NotAPodcastError(PodLensError):
+    """Raised when the submitted video is classified as non-podcast content."""

@@ -34,6 +34,9 @@ class VideoMetadata:
     like_count: int | None
     comment_count: int | None
     comments_disabled: bool = False
+    # Podcast classification helpers (None when not fetched)
+    category_id: str | None = None
+    duration_seconds: int | None = None
 
 
 @dataclass
@@ -88,7 +91,7 @@ class YouTubeService:
         try:
             response = (
                 client.videos()
-                .list(part="snippet,statistics,status", id=video_id)
+                .list(part="snippet,statistics,status,contentDetails", id=video_id)
                 .execute()
             )
         except HttpError as exc:
@@ -103,6 +106,7 @@ class YouTubeService:
         item = items[0]
         snippet = item.get("snippet", {})
         statistics = item.get("statistics", {})
+        content_details = item.get("contentDetails", {})
         thumbnails = snippet.get("thumbnails", {})
         best_thumb = thumbnails.get("high") or thumbnails.get("default") or {}
 
@@ -120,6 +124,8 @@ class YouTubeService:
             like_count=_safe_int(statistics.get("likeCount")),
             comment_count=_safe_int(statistics.get("commentCount")),
             comments_disabled=comments_disabled,
+            category_id=snippet.get("categoryId"),
+            duration_seconds=_parse_duration(content_details.get("duration")),
         )
 
     def fetch_comments(
@@ -228,6 +234,24 @@ def _safe_int(value) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _parse_duration(iso_duration: str | None) -> int | None:
+    """Parse an ISO 8601 duration string (e.g. PT1H2M30S) into total seconds."""
+    if not iso_duration:
+        return None
+    import re as _re
+    pattern = _re.compile(
+        r"P(?:(?P<days>\d+)D)?T?(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?"
+    )
+    m = pattern.match(iso_duration)
+    if not m:
+        return None
+    days = int(m.group("days") or 0)
+    hours = int(m.group("hours") or 0)
+    minutes = int(m.group("minutes") or 0)
+    seconds = int(m.group("seconds") or 0)
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds
 
 
 def _comment_from_snippet(

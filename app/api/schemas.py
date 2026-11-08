@@ -6,7 +6,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.utils.youtube_url import is_valid_youtube_url
+from app.core.exceptions import InvalidYouTubeUrlError
+from app.utils.youtube_url import extract_video_id, is_valid_youtube_url
 
 
 class AnalyzeRequest(BaseModel):
@@ -15,11 +16,10 @@ class AnalyzeRequest(BaseModel):
     @field_validator("url")
     @classmethod
     def validate_url(cls, v: str) -> str:
-        if not is_valid_youtube_url(v):
-            raise ValueError(
-                "Not a supported YouTube video URL. Expected formats: "
-                "youtube.com/watch?v=..., youtu.be/..., youtube.com/shorts/..."
-            )
+        try:
+            extract_video_id(v)
+        except InvalidYouTubeUrlError as exc:
+            raise ValueError(str(exc)) from exc
         return v
 
 

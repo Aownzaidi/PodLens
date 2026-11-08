@@ -33,9 +33,9 @@ Respond with a single JSON object with exactly these keys:
   "discussion_themes": ["short theme phrase", "..."],
   "future_topics": ["suggested future topic grounded in the comments", "..."]
 }
-Provide at most 6 discussion_themes and at most 6 future_topics. If the
-comments do not support any future topic suggestions, return an empty list
-for future_topics rather than inventing one.
+Provide at most 6 discussion_themes and exactly 5 future_topics (or up to 5
+if comments are limited). If the comments do not support any future topic
+suggestions, return an empty list for future_topics rather than inventing one.
 """
 
 
@@ -165,5 +165,5 @@ class LLMService:
         return AudienceInsights(
             audience_summary=summary.strip(),
             discussion_themes=[str(t).strip() for t in themes if str(t).strip()][:6],
-            future_topics=[str(t).strip() for t in topics if str(t).strip()][:6],
+            future_topics=[str(t).strip() for t in topics if str(t).strip()][:5],
         )

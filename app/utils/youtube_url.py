@@ -53,7 +53,7 @@ def extract_video_id(url: str) -> str:
         pass  # kept as-is, already covered by _ALLOWED_HOSTS
     if host not in _ALLOWED_HOSTS:
         raise InvalidYouTubeUrlError(
-            f"'{host or url}' is not a supported YouTube domain."
+            f"Invalid URL: '{host or url}' is not a supported YouTube domain. Please enter a valid YouTube video URL."
         )
 
     video_id: str | None = None

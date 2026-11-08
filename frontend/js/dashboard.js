@@ -68,8 +68,9 @@ const PodLensDashboard = (() => {
     }
 
     topicsEl.innerHTML = "";
-    if (insights.future_topics && insights.future_topics.length) {
-      insights.future_topics.forEach((topic) => {
+    const futureTopics = (insights.future_topics || []).slice(0, 5);
+    if (futureTopics.length) {
+      futureTopics.forEach((topic) => {
         const li = document.createElement("li");
         li.textContent = topic;
         topicsEl.appendChild(li);

@@ -78,3 +78,15 @@ def test_llm_service_parse_response_valid():
     assert insights.audience_summary == "Great reception."
     assert insights.discussion_themes == ["a"]
     assert insights.future_topics == ["b"]
+
+
+def test_llm_service_parse_response_caps_future_topics_at_5():
+    payload = {
+        "audience_summary": "Great reception.",
+        "discussion_themes": ["t1", "t2"],
+        "future_topics": ["f1", "f2", "f3", "f4", "f5", "f6", "f7"],
+    }
+    import json
+    insights = LLMService._parse_response(json.dumps(payload))
+    assert len(insights.future_topics) == 5
+    assert insights.future_topics == ["f1", "f2", "f3", "f4", "f5"]

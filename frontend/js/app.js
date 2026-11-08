@@ -108,9 +108,15 @@
       return;
     }
 
+    // Client-side quick check: must be a YouTube URL
+    if (!/^(https?:\/\/)?(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(url)) {
+      setFormError("Invalid URL: Please enter a valid YouTube video URL (e.g. https://www.youtube.com/watch?v=...).");
+      return;
+    }
+
     const btn = document.getElementById("analyze-btn");
     btn.disabled = true;
-    setStatusPanel(true, "Starting analysis…", []);
+    setStatusPanel(true, "Validating video…", []);
 
     try {
       const result = await PodLensApi.startAnalysis(url);
@@ -130,6 +136,28 @@
     return isNaN(d.getTime()) ? "" : `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
   }
 
+  let isHistoryExpanded = true;
+  let currentHistoryCount = 0;
+
+  function updateHistoryToggleUI() {
+    const historyPanel = document.getElementById("history-panel");
+    const toggleIcon = document.getElementById("history-toggle-icon");
+    const toggleBtn = document.getElementById("history-toggle-btn");
+    const labelText = document.getElementById("history-btn-label");
+    if (!toggleBtn || !historyPanel) return;
+
+    historyPanel.hidden = !isHistoryExpanded;
+    historyPanel.style.display = isHistoryExpanded ? "block" : "none";
+    if (toggleIcon) toggleIcon.textContent = isHistoryExpanded ? "▼" : "▶";
+    toggleBtn.setAttribute("aria-expanded", isHistoryExpanded);
+
+    if (labelText) {
+      const countStr = currentHistoryCount > 0 ? ` (${currentHistoryCount})` : "";
+      const hint = isHistoryExpanded ? "" : " — Click to expand";
+      labelText.textContent = `ANALYSIS HISTORY${countStr}${hint}`;
+    }
+  }
+
   async function loadHistory() {
     const listEl = document.getElementById("history-list");
     const emptyEl = document.getElementById("history-empty");
@@ -138,6 +166,9 @@
     try {
       const items = await PodLensApi.getHistory();
       listEl.innerHTML = "";
+      currentHistoryCount = items ? items.length : 0;
+      updateHistoryToggleUI();
+
       if (!items || items.length === 0) {
         if (emptyEl) emptyEl.hidden = false;
         return;
@@ -187,6 +218,8 @@
             delBtn.textContent = "...";
             await PodLensApi.deleteHistory(item.video_id);
             row.remove();
+            currentHistoryCount = Math.max(0, currentHistoryCount - 1);
+            updateHistoryToggleUI();
             const remaining = listEl.querySelectorAll(".history-row");
             if (remaining.length === 0 && emptyEl) {
               emptyEl.hidden = false;
@@ -210,17 +243,11 @@
 
   function setupHistoryToggle() {
     const toggleBtn = document.getElementById("history-toggle-btn");
-    const historyPanel = document.getElementById("history-panel");
-    const toggleIcon = document.getElementById("history-toggle-icon");
-    if (!toggleBtn || !historyPanel) return;
+    if (!toggleBtn) return;
 
-    let isExpanded = true;
     toggleBtn.addEventListener("click", () => {
-      isExpanded = !isExpanded;
-      historyPanel.hidden = !isExpanded;
-      historyPanel.style.display = isExpanded ? "block" : "none";
-      if (toggleIcon) toggleIcon.textContent = isExpanded ? "▼" : "▶";
-      toggleBtn.setAttribute("aria-expanded", isExpanded);
+      isHistoryExpanded = !isHistoryExpanded;
+      updateHistoryToggleUI();
     });
   }
 
