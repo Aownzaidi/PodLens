@@ -3,170 +3,436 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>PodLens — YouTube Podcast Audience Insights</title>
-<link rel="stylesheet" href="css/styles.css?v=3" />
+<title>PODLENS — Comment Intelligence Pipeline</title>
+<link rel="stylesheet" href="css/styles.css?v=12" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 </head>
 <body>
+
+<!-- Header (Obsidian & Cyber-Mint Branding - Screenshot 1) -->
 <header class="site-header">
   <div class="container header-inner">
-    <div class="brand">
-      <span class="brand-mark">PodLens</span>
-      <span class="brand-tag">Intelligent YouTube Podcast Analyzer</span>
+    <div class="brand-wrapper" id="brand-home-link" title="Return to Target Hub">
+      <div class="brand-icon-box" aria-hidden="true">
+        <!-- Glowing Mic SVG Icon -->
+        <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="23"></line>
+          <line x1="8" y1="23" x2="16" y2="23"></line>
+        </svg>
+      </div>
+      <div class="brand-meta">
+        <span class="brand-name">PODLENS</span>
+        <span class="brand-tagline">COMMENT INTELLIGENCE PIPELINE</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div id="active-video-header-pill" class="active-video-pill" hidden>
+        <span class="pill-dot"></span>
+        <span id="active-video-title-pill" class="pill-text">Loaded Video</span>
+      </div>
+      <span class="version-pill">v1.0</span>
     </div>
   </div>
 </header>
 
+<!-- Multi-Page Workspace Navigation Bar -->
+<nav class="workspace-nav-bar" aria-label="Workspace Pages">
+  <div class="container">
+    <div class="nav-tabs" role="tablist">
+      <button type="button" class="nav-tab-btn active" data-view="view-target" role="tab" id="tab-nav-target">
+        <span class="nav-tab-num">[01]</span> TARGET URL
+      </button>
+      <button type="button" class="nav-tab-btn" data-view="view-dashboard" role="tab" id="tab-nav-dashboard">
+        <span class="nav-tab-num">[02]</span> DASHBOARD
+      </button>
+      <button type="button" class="nav-tab-btn" data-view="view-comments" role="tab" id="tab-nav-comments">
+        <span class="nav-tab-num">[03]</span> COMMENTS
+      </button>
+      <button type="button" class="nav-tab-btn" data-view="view-report" role="tab" id="tab-nav-report">
+        <span class="nav-tab-num">[04]</span> REPORT
+      </button>
+      <button type="button" class="nav-tab-btn" data-view="view-history" role="tab" id="tab-nav-history">
+        <span class="nav-tab-num">[05]</span> HISTORY
+      </button>
+    </div>
+  </div>
+</nav>
+
 <main class="container">
 
-  <!-- A. Home / URL Input -->
-  <section id="view-home" class="view">
-    <div class="intro">
-      <h1>Understand your podcast audience</h1>
-      <p>
-        Paste a YouTube podcast video URL. PodLens collects the comments,
-        filters out spam, analyzes sentiment, highlights the comments that
-        matter most, and summarizes audience reaction and future topic ideas.
-      </p>
-    </div>
+  <!-- ====================================================================
+       PAGE 1: TARGET URL / INGESTION HUB (Screenshot 1)
+       ==================================================================== -->
+  <section id="view-target" class="view">
+    <div class="target-hub">
+      <div class="cyber-card cyber-card-glow">
+        <div class="section-tag">TARGET URL</div>
 
-    <form id="analyze-form" class="analyze-form" autocomplete="off">
-      <input
-        id="url-input"
-        type="text"
-        name="url"
-        placeholder="https://www.youtube.com/watch?v=..."
-        aria-label="YouTube podcast video URL"
-        required
-      />
-      <button type="submit" id="analyze-btn">Analyze</button>
-    </form>
-    <p id="form-error" class="error-text" role="alert" hidden></p>
+        <form id="analyze-form" autocomplete="off">
+          <div class="target-input-row">
+            <input
+              id="url-input"
+              class="cyber-input"
+              type="text"
+              name="url"
+              placeholder="Paste YouTube podcast URL..."
+              aria-label="YouTube podcast video URL"
+              required
+            />
+            <button type="submit" id="analyze-btn" class="cyber-btn-analyze">
+              ANALYZE
+            </button>
+          </div>
 
-    <div id="status-panel" class="status-panel" style="display: none;" hidden>
-      <div class="spinner" aria-hidden="true"></div>
-      <div>
-        <p id="status-text">Starting analysis…</p>
-        <p id="status-warnings" class="warnings-text"></p>
+          <div class="target-options-row">
+            <div class="slider-group">
+              <span class="slider-label">MAX COMMENTS:</span>
+              <input
+                id="max-comments-slider"
+                class="cyber-slider"
+                type="range"
+                min="10"
+                max="200"
+                step="10"
+                value="200"
+                aria-label="Max comments to analyze"
+              />
+              <span id="max-comments-val" class="slider-val">200</span>
+            </div>
+
+            <div class="warning-pill">
+              <span>⚠</span> PODCAST VIDEOS ONLY
+            </div>
+          </div>
+        </form>
+
+        <div id="form-error" class="error-banner" role="alert" hidden></div>
+
+        <!-- Live Analysis Status / Pipeline Stepper -->
+        <div id="status-panel" class="status-card" style="display: none;" hidden>
+          <div class="status-header">
+            <div class="cyber-spinner" aria-hidden="true"></div>
+            <div>
+              <p id="status-text" class="status-text">Starting analysis…</p>
+              <p id="status-warnings" class="status-warnings"></p>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- History Panel Section -->
-    <div class="history-section">
-      <button type="button" id="history-toggle-btn" class="history-toggle-btn" aria-expanded="true">
-        <span id="history-toggle-icon">▼</span> <span id="history-btn-label">ANALYSIS HISTORY</span>
-      </button>
-      <div id="history-panel" class="history-panel">
-        <div id="history-list" class="history-list"></div>
-        <p id="history-empty" class="muted history-empty" hidden>No analyzed videos in database yet.</p>
+      <!-- Quick Analysis History (Collapsible below Target Card - Screenshot 1) -->
+      <div class="history-accordion-wrap">
+        <button type="button" id="history-toggle-btn" class="history-toggle-trigger" aria-expanded="true">
+          <span id="history-toggle-icon" class="toggle-arrow">▼</span>
+          <span id="history-btn-label">ANALYSIS HISTORY</span>
+        </button>
+
+        <div id="quick-history-panel" class="history-panel">
+          <div id="quick-history-list" class="history-list"></div>
+          <p id="quick-history-empty" class="text-dim" style="padding: 0.5rem 0; font-size: 0.8rem;" hidden>
+            No analyzed videos in database yet.
+          </p>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- B. Analysis Dashboard -->
+  <!-- ====================================================================
+       PAGE 2: DASHBOARD OVERVIEW (Screenshot 2)
+       ==================================================================== -->
   <section id="view-dashboard" class="view" hidden>
-    <div class="dashboard-header">
-      <div>
-        <h2 id="video-title">Video title</h2>
-        <p id="video-meta" class="muted"></p>
-      </div>
-      <button id="new-analysis-btn" class="secondary-btn">Analyze another video</button>
+    <!-- Empty State if no video loaded -->
+    <div id="dashboard-empty-state" class="empty-state-box" hidden>
+      <div class="empty-state-icon">⚡</div>
+      <div class="empty-state-title">No Active Analysis Loaded</div>
+      <p class="empty-state-desc">
+        Enter a YouTube podcast URL on the Target Hub or pick a past session from History to inspect audience intelligence.
+      </p>
+      <button type="button" class="cyber-btn-analyze" style="margin: 0 auto;" onclick="PodLensApp.navigateTo('view-target')">
+        GO TO TARGET HUB
+      </button>
     </div>
 
-    <p id="dashboard-warnings" class="warnings-text"></p>
-
-    <div class="stat-cards">
-      <div class="stat-card">
-        <span class="stat-value" id="stat-total-comments">0</span>
-        <span class="stat-label">Comments collected</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-value" id="stat-spam-count">0</span>
-        <span class="stat-label" id="stat-spam-label">Spam comments</span>
-      </div>
-      <div class="stat-card">
-        <span class="stat-value" id="stat-analyzed-count">0</span>
-        <span class="stat-label">Analyzed for sentiment</span>
-      </div>
-    </div>
-
-    <div class="dashboard-grid">
-      <div class="panel">
-        <h3>Sentiment distribution</h3>
-        <canvas id="sentiment-chart" height="220"></canvas>
-      </div>
-
-      <div class="panel">
-        <h3>Audience reaction summary</h3>
-        <div id="audience-summary" class="insight-body">
-          <p class="muted">No summary available yet.</p>
+    <div id="dashboard-content-wrap">
+      <!-- Active Target Banner -->
+      <div class="active-target-banner">
+        <div class="banner-left">
+          <h2 id="video-title">Video Title</h2>
+          <p id="video-meta" class="banner-meta"></p>
+        </div>
+        <div class="banner-actions">
+          <button id="dashboard-new-analysis-btn" class="cyber-btn-secondary" title="Analyze another podcast">
+            + New Target
+          </button>
         </div>
       </div>
 
-      <div class="panel">
-        <h3>Suggested future topics</h3>
-        <ul id="future-topics" class="topic-list"></ul>
+      <p id="dashboard-warnings" class="status-warnings" style="margin-bottom: 1rem;" hidden></p>
+
+      <!-- | ANALYSIS SUMMARY: 4 KPI Cards (Screenshot 2) -->
+      <div class="section-tag">ANALYSIS SUMMARY</div>
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <span class="kpi-label">TOTAL COMMENTS</span>
+          <span class="kpi-value" id="stat-total-comments">0</span>
+          <span class="kpi-sub" id="stat-video-sub">-</span>
+        </div>
+
+        <div class="kpi-card">
+          <span class="kpi-label">SPAM DETECTED</span>
+          <span class="kpi-value" id="stat-spam-count">0</span>
+          <span class="kpi-sub" id="stat-spam-sub">0.0% of comments</span>
+        </div>
+
+        <div class="kpi-card">
+          <span class="kpi-label">AVG SENTIMENT SCORE</span>
+          <span class="kpi-value" id="stat-avg-sentiment">0.000</span>
+          <span class="kpi-sub">0 = negative · 1 = positive</span>
+        </div>
+
+        <div class="kpi-card">
+          <span class="kpi-label">PROCESSING TIME</span>
+          <span class="kpi-value" id="stat-processing-time">-</span>
+          <span class="kpi-sub">seconds</span>
+        </div>
       </div>
 
-      <div class="panel panel-wide">
-        <h3>Important audience comments</h3>
-        <ul id="important-comments" class="comment-list"></ul>
+      <!-- Row 2: Sentiment Breakdown & Spam Breakdown (Screenshot 2) -->
+      <div class="analytics-two-col">
+        <!-- Sentiment Breakdown -->
+        <div class="breakdown-card">
+          <div class="section-tag">SENTIMENT BREAKDOWN</div>
+          <div class="sentiment-bar-list">
+            <div class="sentiment-bar-row">
+              <span class="bar-label">Positive</span>
+              <div class="bar-track">
+                <div id="bar-pos-fill" class="bar-fill bar-fill-positive" style="width: 0%;"></div>
+              </div>
+              <span id="bar-pos-stat" class="bar-stat">0 (0.0%)</span>
+            </div>
+
+            <div class="sentiment-bar-row">
+              <span class="bar-label">Negative</span>
+              <div class="bar-track">
+                <div id="bar-neg-fill" class="bar-fill bar-fill-negative" style="width: 0%;"></div>
+              </div>
+              <span id="bar-neg-stat" class="bar-stat">0 (0.0%)</span>
+            </div>
+
+            <div class="sentiment-bar-row">
+              <span class="bar-label">Neutral</span>
+              <div class="bar-track">
+                <div id="bar-neu-fill" class="bar-fill bar-fill-neutral" style="width: 0%;"></div>
+              </div>
+              <span id="bar-neu-stat" class="bar-stat">0 (0.0%)</span>
+            </div>
+          </div>
+          <canvas id="sentiment-chart" height="130" style="display: none;"></canvas>
+        </div>
+
+        <!-- Spam Breakdown -->
+        <div class="breakdown-card">
+          <div class="section-tag">SPAM BREAKDOWN</div>
+          <div class="spam-breakdown-body">
+            <div class="spam-radar-circle">
+              <span id="spam-radar-pct" class="spam-radar-pct">0.0%</span>
+              <span class="spam-radar-sub">SPAM</span>
+            </div>
+
+            <div class="spam-stat-list">
+              <div class="spam-stat-row">
+                <span class="spam-stat-name">Spam / Bots</span>
+                <div class="spam-stat-track">
+                  <div id="spam-fill-bar" class="spam-stat-fill" style="width: 0%;"></div>
+                </div>
+                <span id="spam-stat-num" class="spam-stat-count">0</span>
+              </div>
+
+              <div class="spam-stat-row">
+                <span class="spam-stat-name">Clean Comments</span>
+                <div class="spam-stat-track">
+                  <div id="clean-fill-bar" class="spam-stat-fill spam-stat-fill-clean" style="width: 0%;"></div>
+                </div>
+                <span id="clean-stat-num" class="spam-stat-count">0</span>
+              </div>
+
+              <div class="spam-stat-row">
+                <span class="spam-stat-name">Total Analyzed</span>
+                <div class="spam-stat-track">
+                  <div id="analyzed-fill-bar" class="spam-stat-fill" style="width: 100%; background: #38bdf8;"></div>
+                </div>
+                <span id="analyzed-stat-num" class="spam-stat-count">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Audience Reaction Summary & Future Topics -->
+      <div class="insights-two-col">
+        <!-- Audience Reaction Summary -->
+        <div class="insight-card">
+          <div class="section-tag">AUDIENCE REACTION SUMMARY</div>
+          <div id="audience-summary" class="audience-text">
+            No summary available yet.
+          </div>
+          <div id="discussion-themes" class="themes-pills"></div>
+        </div>
+
+        <!-- Suggested Future Topics -->
+        <div class="insight-card">
+          <div class="section-tag">SUGGESTED FUTURE TOPICS</div>
+          <div id="future-topics-list" class="future-topics-grid">
+            <div class="text-dim" style="padding: 0.5rem 0;">No topic suggestions available.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 4: Important Comments -->
+      <div class="cyber-card" style="margin-top: 1.25rem;">
+        <div class="section-tag">IMPORTANT AUDIENCE COMMENTS</div>
+        <div id="important-comments-grid" class="important-comments-grid">
+          <p class="text-dim">No high-importance comments detected.</p>
+        </div>
       </div>
     </div>
+  </section>
 
-    <nav class="tab-nav">
-      <button class="tab-btn active" data-tab="comments">Comments</button>
-      <button class="tab-btn" data-tab="report">Full report</button>
-    </nav>
+  <!-- ====================================================================
+       PAGE 3: COMMENTS EXPLORER (Screenshots 3 & 4)
+       ==================================================================== -->
+  <section id="view-comments" class="view" hidden>
+    <!-- Empty State if no video loaded -->
+    <div id="comments-empty-state" class="empty-state-box" hidden>
+      <div class="empty-state-icon">💬</div>
+      <div class="empty-state-title">No Comments Loaded</div>
+      <p class="empty-state-desc">
+        Load an analysis session first to filter and explore audience comments.
+      </p>
+      <button type="button" class="cyber-btn-analyze" style="margin: 0 auto;" onclick="PodLensApp.navigateTo('view-target')">
+        START ANALYSIS
+      </button>
+    </div>
 
-    <!-- C. Comments Section -->
-    <section id="tab-comments" class="tab-panel">
-      <div class="comments-toolbar">
-        <input type="search" id="comment-search" placeholder="Search comments…" />
-        <select id="filter-spam">
-          <option value="">All comments</option>
-          <option value="not_spam">Not spam</option>
-          <option value="spam">Spam</option>
-        </select>
-        <select id="filter-sentiment">
-          <option value="">Any sentiment</option>
-          <option value="positive">Positive</option>
-          <option value="negative">Negative</option>
-          <option value="neutral">Neutral</option>
-        </select>
+    <div id="comments-content-wrap" class="comments-panel">
+      <div class="section-tag">COMMENTS</div>
+
+      <!-- Filter Pills & Search Bar (Screenshot 3) -->
+      <div class="comments-toolbar-row">
+        <div class="filter-pills-group" id="filter-pills-container">
+          <button type="button" class="filter-pill active" data-filter="all">[ All ]</button>
+          <button type="button" class="filter-pill" data-filter="positive">[ Positive ]</button>
+          <button type="button" class="filter-pill" data-filter="negative">[ Negative ]</button>
+          <button type="button" class="filter-pill" data-filter="spam">[ Spam Only ]</button>
+          <button type="button" class="filter-pill" data-filter="clean">[ Clean Only ]</button>
+        </div>
+
+        <div class="search-input-wrap">
+          <input
+            type="search"
+            id="comment-search"
+            class="cyber-search-input"
+            placeholder="Search comments..."
+            aria-label="Search comments"
+          />
+        </div>
       </div>
 
-      <table class="comments-table">
-        <thead>
-          <tr>
-            <th>Comment</th>
-            <th>Likes</th>
-            <th>Spam</th>
-            <th>Sentiment</th>
-          </tr>
-        </thead>
-        <tbody id="comments-tbody"></tbody>
-      </table>
+      <!-- Terminal Table (Screenshot 4) -->
+      <div class="table-scroll-container">
+        <table class="terminal-table">
+          <thead>
+            <tr>
+              <th class="col-author">AUTHOR</th>
+              <th class="col-comment">COMMENT</th>
+              <th class="col-sentiment">SENTIMENT</th>
+              <th class="col-spam">SPAM</th>
+              <th class="col-scores">SCORES</th>
+            </tr>
+          </thead>
+          <tbody id="comments-tbody">
+            <tr>
+              <td colspan="5" class="text-dim" style="text-align: center; padding: 2rem;">Loading comments…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-      <div class="pagination">
-        <button id="prev-page-btn" class="secondary-btn">Previous</button>
+      <!-- Pagination -->
+      <div class="table-pagination-row">
+        <button id="prev-page-btn" class="cyber-btn-secondary">◀ Previous</button>
         <span id="page-indicator">Page 1</span>
-        <button id="next-page-btn" class="secondary-btn">Next</button>
+        <button id="next-page-btn" class="cyber-btn-secondary">Next ▶</button>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <!-- D. Analysis Report -->
-    <section id="tab-report" class="tab-panel" hidden>
-      <div id="report-content" class="report-content"></div>
-    </section>
+  <!-- ====================================================================
+       PAGE 4: EXECUTIVE REPORT
+       ==================================================================== -->
+  <section id="view-report" class="view" hidden>
+    <div id="report-empty-state" class="empty-state-box" hidden>
+      <div class="empty-state-icon">📄</div>
+      <div class="empty-state-title">No Report Available</div>
+      <p class="empty-state-desc">
+        Complete an analysis to generate the executive audience intelligence briefing.
+      </p>
+      <button type="button" class="cyber-btn-analyze" style="margin: 0 auto;" onclick="PodLensApp.navigateTo('view-target')">
+        ANALYZE A PODCAST
+      </button>
+    </div>
+
+    <div id="report-content-wrap" class="report-card">
+      <div class="report-header-row">
+        <div class="section-tag" style="margin: 0;">EXECUTIVE REPORT</div>
+        <div class="report-actions-group">
+          <button id="download-pdf-btn" class="cyber-btn-download" type="button" title="Download PDF file directly to your computer">
+            <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Download PDF</span>
+          </button>
+          <button id="print-report-btn" class="cyber-btn-secondary" type="button" onclick="window.print()" title="Print via browser dialog">
+            🖨 Print
+          </button>
+        </div>
+      </div>
+      <div id="report-content" class="report-content">
+        <p class="text-dim">Loading report…</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       PAGE 5: ARCHIVE & HISTORY
+       ==================================================================== -->
+  <section id="view-history" class="view" hidden>
+    <div class="history-container">
+      <div class="section-tag">ARCHIVE &amp; HISTORY</div>
+      <div id="full-history-list" class="history-list"></div>
+      <div id="full-history-empty" class="empty-state-box" hidden>
+        <div class="empty-state-icon">📂</div>
+        <div class="empty-state-title">No History Found</div>
+        <p class="empty-state-desc">
+          Your analyzed podcast videos will be archived here for instant retrieval.
+        </p>
+      </div>
+    </div>
   </section>
 
 </main>
 
-<script src="js/api.js?v=6"></script>
-<script src="js/dashboard.js?v=6"></script>
-<script src="js/comments.js?v=6"></script>
-<script src="js/report.js?v=6"></script>
-<script src="js/app.js?v=6"></script>
+<!-- Frontend Scripts (Cache-busted) -->
+<script src="js/api.js?v=12"></script>
+<script src="js/dashboard.js?v=12"></script>
+<script src="js/comments.js?v=12"></script>
+<script src="js/report.js?v=12"></script>
+<script src="js/app.js?v=12"></script>
 </body>
 </html>

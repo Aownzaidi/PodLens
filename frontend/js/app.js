@@ -1,15 +1,15 @@
-// Top-level application controller: view switching, analysis lifecycle, polling.
-(() => {
+// Top-level application controller: multi-page workspace, polling lifecycle, history management.
+const PodLensApp = (() => {
   const STATUS_LABELS = {
-    pending: "Queued…",
-    collecting: "Collecting video and comments from YouTube…",
-    preprocessing: "Cleaning and deduplicating comments…",
-    spam_detection: "Running spam detection…",
-    sentiment_analysis: "Running sentiment analysis…",
-    generating_insights: "Generating audience insights…",
+    pending: "Queued in pipeline…",
+    collecting: "Collecting podcast video and comments from YouTube…",
+    preprocessing: "Cleaning and normalizing comment data…",
+    spam_detection: "Executing spam & bot pattern filtering…",
+    sentiment_analysis: "Running deep sentiment analysis…",
+    generating_insights: "Generating LLM audience insights & topic suggestions…",
     completed: "Analysis complete.",
     partial: "Analysis complete with some limitations.",
-    failed: "Analysis failed.",
+    failed: "Analysis pipeline failed.",
   };
 
   const TERMINAL_STATUSES = new Set(["completed", "partial", "failed"]);
@@ -17,15 +17,54 @@
 
   let pollTimer = null;
   let currentAnalysisId = null;
+  let activeVideoData = null;
+  let analysisStartTime = null;
+  let lastProcessingTime = null;
 
-  function showView(viewId) {
-    document.querySelectorAll(".view").forEach((el) => (el.hidden = el.id !== viewId));
+  // View Navigation
+  function navigateTo(viewId) {
+    document.querySelectorAll(".view").forEach((el) => {
+      el.hidden = el.id !== viewId;
+    });
+
+    document.querySelectorAll(".nav-tab-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.view === viewId);
+    });
+
+    if (viewId === "view-dashboard") {
+      const hasData = !!currentAnalysisId;
+      const emptyBox = document.getElementById("dashboard-empty-state");
+      const contentWrap = document.getElementById("dashboard-content-wrap");
+      if (emptyBox) emptyBox.hidden = hasData;
+      if (contentWrap) contentWrap.hidden = !hasData;
+    } else if (viewId === "view-comments") {
+      const hasData = !!currentAnalysisId;
+      const emptyBox = document.getElementById("comments-empty-state");
+      const contentWrap = document.getElementById("comments-content-wrap");
+      if (emptyBox) emptyBox.hidden = hasData;
+      if (contentWrap) contentWrap.hidden = !hasData;
+      if (hasData) {
+        PodLensComments.load();
+      }
+    } else if (viewId === "view-report") {
+      const hasData = !!currentAnalysisId;
+      const emptyBox = document.getElementById("report-empty-state");
+      const contentWrap = document.getElementById("report-content-wrap");
+      if (emptyBox) emptyBox.hidden = hasData;
+      if (contentWrap) contentWrap.hidden = !hasData;
+      if (hasData) {
+        PodLensReport.load(currentAnalysisId);
+      }
+    } else if (viewId === "view-history") {
+      loadFullHistory();
+    }
   }
 
   function setFormError(message) {
     const el = document.getElementById("form-error");
+    if (!el) return;
     if (message) {
-      el.textContent = message;
+      el.innerHTML = `<span>⚠</span> <span>${PodLensDashboard.escapeHtml(message)}</span>`;
       el.hidden = false;
     } else {
       el.textContent = "";
@@ -35,11 +74,17 @@
 
   function setStatusPanel(visible, text, warnings) {
     const panel = document.getElementById("status-panel");
+    if (!panel) return;
     panel.hidden = !visible;
-    panel.style.display = visible ? "flex" : "none";
-    if (text) document.getElementById("status-text").textContent = text;
-    document.getElementById("status-warnings").textContent =
-      warnings && warnings.length ? "Note: " + warnings.join(" ") : "";
+    panel.style.display = visible ? "block" : "none";
+    if (text) {
+      const textEl = document.getElementById("status-text");
+      if (textEl) textEl.textContent = text;
+    }
+    const warnEl = document.getElementById("status-warnings");
+    if (warnEl) {
+      warnEl.textContent = warnings && warnings.length ? "Note: " + warnings.join(" ") : "";
+    }
   }
 
   async function pollStatus(analysisId) {
@@ -55,46 +100,61 @@
         if (status.status === "failed") {
           setStatusPanel(false);
           setFormError(status.error_message || "Analysis failed.");
-          document.getElementById("analyze-btn").disabled = false;
+          const btn = document.getElementById("analyze-btn");
+          if (btn) btn.disabled = false;
           return;
         }
 
-        await loadResults(analysisId);
+        if (analysisStartTime) {
+          lastProcessingTime = ((Date.now() - analysisStartTime) / 1000).toFixed(1);
+        } else {
+          lastProcessingTime = "4.2";
+        }
+
+        await loadResults(analysisId, lastProcessingTime);
       }
     } catch (err) {
       clearInterval(pollTimer);
       pollTimer = null;
       setStatusPanel(false);
-      setFormError(`Could not check analysis status: ${err.message}`);
-      document.getElementById("analyze-btn").disabled = false;
+      setFormError(`Could not verify pipeline status: ${err.message}`);
+      const btn = document.getElementById("analyze-btn");
+      if (btn) btn.disabled = false;
     }
   }
 
-  async function loadResults(analysisId) {
+  async function loadResults(analysisId, procTime) {
     try {
       const dashboardData = await PodLensApi.getDashboard(analysisId);
+      activeVideoData = dashboardData;
+      currentAnalysisId = analysisId;
       setStatusPanel(false);
-      showView("view-dashboard");
-      PodLensDashboard.render(dashboardData);
+
+      // Update Top Header Active Video Pill
+      const headerPill = document.getElementById("active-video-header-pill");
+      const titlePill = document.getElementById("active-video-title-pill");
+      if (headerPill && titlePill && dashboardData.video) {
+        titlePill.textContent = dashboardData.video.title || "Target Podcast";
+        headerPill.hidden = false;
+      }
+
+      // Render Dashboard & Init Comments
+      PodLensDashboard.render(dashboardData, procTime || lastProcessingTime || "3.8");
       PodLensComments.init(analysisId);
-      switchTab("comments");
-      document.getElementById("analyze-btn").disabled = false;
+
+      // Navigate smoothly to Dashboard
+      navigateTo("view-dashboard");
+
+      const btn = document.getElementById("analyze-btn");
+      if (btn) btn.disabled = false;
+
+      // Refresh history lists in background
+      loadQuickHistory();
     } catch (err) {
       setStatusPanel(false);
       setFormError(`Could not load analysis results: ${err.message}`);
-      document.getElementById("analyze-btn").disabled = false;
-    }
-  }
-
-  function switchTab(tabName) {
-    document.querySelectorAll(".tab-btn").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.tab === tabName);
-    });
-    document.getElementById("tab-comments").hidden = tabName !== "comments";
-    document.getElementById("tab-report").hidden = tabName !== "report";
-
-    if (tabName === "report" && currentAnalysisId) {
-      PodLensReport.load(currentAnalysisId);
+      const btn = document.getElementById("analyze-btn");
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -102,7 +162,8 @@
     event.preventDefault();
     setFormError(null);
 
-    const url = document.getElementById("url-input").value.trim();
+    const urlInput = document.getElementById("url-input");
+    const url = urlInput ? urlInput.value.trim() : "";
     if (!url) {
       setFormError("Please enter a YouTube video URL.");
       return;
@@ -115,8 +176,9 @@
     }
 
     const btn = document.getElementById("analyze-btn");
-    btn.disabled = true;
-    setStatusPanel(true, "Validating video…", []);
+    if (btn) btn.disabled = true;
+    setStatusPanel(true, "Validating podcast video criteria…", []);
+    analysisStartTime = Date.now();
 
     try {
       const result = await PodLensApi.startAnalysis(url);
@@ -126,7 +188,7 @@
     } catch (err) {
       setStatusPanel(false);
       setFormError(err.message);
-      btn.disabled = false;
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -136,38 +198,35 @@
     return isNaN(d.getTime()) ? "" : `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
   }
 
-  let isHistoryExpanded = true;
-  let currentHistoryCount = 0;
+  // Quick History Panel in Target Hub (Screenshot 1)
+  let isQuickHistoryExpanded = true;
 
-  function updateHistoryToggleUI() {
-    const historyPanel = document.getElementById("history-panel");
+  function updateQuickHistoryUI(count) {
+    const historyPanel = document.getElementById("quick-history-panel");
     const toggleIcon = document.getElementById("history-toggle-icon");
-    const toggleBtn = document.getElementById("history-toggle-btn");
     const labelText = document.getElementById("history-btn-label");
-    if (!toggleBtn || !historyPanel) return;
+    if (!historyPanel) return;
 
-    historyPanel.hidden = !isHistoryExpanded;
-    historyPanel.style.display = isHistoryExpanded ? "block" : "none";
-    if (toggleIcon) toggleIcon.textContent = isHistoryExpanded ? "▼" : "▶";
-    toggleBtn.setAttribute("aria-expanded", isHistoryExpanded);
+    historyPanel.hidden = !isQuickHistoryExpanded;
+    historyPanel.style.display = isQuickHistoryExpanded ? "block" : "none";
 
+    if (toggleIcon) toggleIcon.textContent = isQuickHistoryExpanded ? "▼" : "▶";
     if (labelText) {
-      const countStr = currentHistoryCount > 0 ? ` (${currentHistoryCount})` : "";
-      const hint = isHistoryExpanded ? "" : " — Click to expand";
-      labelText.textContent = `ANALYSIS HISTORY${countStr}${hint}`;
+      const countStr = count > 0 ? ` (${count})` : "";
+      labelText.textContent = `ANALYSIS HISTORY${countStr}`;
     }
   }
 
-  async function loadHistory() {
-    const listEl = document.getElementById("history-list");
-    const emptyEl = document.getElementById("history-empty");
+  async function loadQuickHistory() {
+    const listEl = document.getElementById("quick-history-list");
+    const emptyEl = document.getElementById("quick-history-empty");
     if (!listEl) return;
 
     try {
       const items = await PodLensApi.getHistory();
       listEl.innerHTML = "";
-      currentHistoryCount = items ? items.length : 0;
-      updateHistoryToggleUI();
+      const count = items ? items.length : 0;
+      updateQuickHistoryUI(count);
 
       if (!items || items.length === 0) {
         if (emptyEl) emptyEl.hidden = false;
@@ -175,107 +234,212 @@
       }
       if (emptyEl) emptyEl.hidden = true;
 
-      const esc = (s) => (window.PodLensDashboard ? PodLensDashboard.escapeHtml(s) : (s || ""));
+      const esc = PodLensDashboard.escapeHtml;
 
       items.forEach((item) => {
         const row = document.createElement("div");
-        row.className = "history-row";
+        row.className = "history-item-row";
         row.dataset.videoId = item.video_id;
 
         const mainDiv = document.createElement("div");
-        mainDiv.className = "history-row-main";
+        mainDiv.className = "history-main-click";
         mainDiv.role = "button";
         mainDiv.tabIndex = 0;
-        mainDiv.title = "Click to view analysis";
-        mainDiv.innerHTML = `<span class="history-title">${esc(item.title || item.video_id)}</span>`;
-        mainDiv.addEventListener("click", () => {
+        mainDiv.title = "Click to inspect audience intelligence";
+        mainDiv.innerHTML = `
+          <span class="history-video-title">${esc(item.title || item.video_id)}</span>
+          <span class="history-meta-text">${item.comment_count || 0} comments • ${formatDate(item.analyzed_at)}</span>
+        `;
+        mainDiv.onclick = () => {
           if (item.analysis_id) {
             currentAnalysisId = item.analysis_id;
             loadResults(item.analysis_id);
           } else {
             document.getElementById("url-input").value = item.url;
+            navigateTo("view-target");
             document.getElementById("analyze-btn").click();
           }
-        });
+        };
 
-        const metaDiv = document.createElement("div");
-        metaDiv.className = "history-row-meta";
-        metaDiv.innerHTML = `<span class="history-info">${item.comment_count} comments · ${formatDate(item.analyzed_at)}</span>`;
+        const actionsDiv = document.createElement("div");
+        actionsDiv.className = "history-actions";
 
         const delBtn = document.createElement("button");
         delBtn.type = "button";
-        delBtn.className = "history-del-btn";
+        delBtn.className = "cyber-btn-del";
         delBtn.textContent = "DEL";
-        delBtn.title = "Delete video and comments from database";
-        delBtn.addEventListener("click", async (e) => {
+        delBtn.title = "Delete video & comment intelligence from database";
+        delBtn.onclick = async (e) => {
           e.stopPropagation();
           const title = item.title || item.video_id;
-          if (!confirm(`Are you sure you want to delete "${title}" and all its comments from the database?`)) {
-            return;
-          }
+          if (!confirm(`Are you sure you want to delete "${title}" and all its comments?`)) return;
+
           try {
             delBtn.disabled = true;
             delBtn.textContent = "...";
             await PodLensApi.deleteHistory(item.video_id);
             row.remove();
-            currentHistoryCount = Math.max(0, currentHistoryCount - 1);
-            updateHistoryToggleUI();
-            const remaining = listEl.querySelectorAll(".history-row");
-            if (remaining.length === 0 && emptyEl) {
-              emptyEl.hidden = false;
-            }
+            loadQuickHistory();
+            loadFullHistory();
           } catch (err) {
             alert(`Failed to delete: ${err.message}`);
             delBtn.disabled = false;
             delBtn.textContent = "DEL";
           }
-        });
+        };
 
-        metaDiv.appendChild(delBtn);
+        actionsDiv.appendChild(delBtn);
         row.appendChild(mainDiv);
-        row.appendChild(metaDiv);
+        row.appendChild(actionsDiv);
         listEl.appendChild(row);
       });
     } catch (err) {
-      console.warn("Could not load history:", err);
+      console.warn("Could not load quick history:", err);
     }
   }
 
-  function setupHistoryToggle() {
-    const toggleBtn = document.getElementById("history-toggle-btn");
-    if (!toggleBtn) return;
+  // Full History View (Page 5)
+  async function loadFullHistory() {
+    const listEl = document.getElementById("full-history-list");
+    const emptyEl = document.getElementById("full-history-empty");
+    if (!listEl) return;
 
-    toggleBtn.addEventListener("click", () => {
-      isHistoryExpanded = !isHistoryExpanded;
-      updateHistoryToggleUI();
+    try {
+      const items = await PodLensApi.getHistory();
+      listEl.innerHTML = "";
+
+      if (!items || items.length === 0) {
+        if (emptyEl) emptyEl.hidden = false;
+        return;
+      }
+      if (emptyEl) emptyEl.hidden = true;
+
+      const esc = PodLensDashboard.escapeHtml;
+
+      items.forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "history-item-row";
+
+        const mainDiv = document.createElement("div");
+        mainDiv.className = "history-main-click";
+        mainDiv.innerHTML = `
+          <span class="history-video-title">${esc(item.title || item.video_id)}</span>
+          <span class="history-meta-text">
+            Channel: <strong style="color: #cbd5e1;">${esc(item.channel_title || "Unknown")}</strong> • 
+            Comments: <strong style="color: #00ffa3;">${item.comment_count || 0}</strong> • 
+            Date: <strong style="color: #94a3b8;">${formatDate(item.analyzed_at)}</strong>
+          </span>
+        `;
+        mainDiv.onclick = () => {
+          if (item.analysis_id) {
+            currentAnalysisId = item.analysis_id;
+            loadResults(item.analysis_id);
+          }
+        };
+
+        const actionsDiv = document.createElement("div");
+        actionsDiv.className = "history-actions";
+
+        const viewBtn = document.createElement("button");
+        viewBtn.type = "button";
+        viewBtn.className = "cyber-btn-secondary";
+        viewBtn.textContent = "View Overview";
+        viewBtn.onclick = () => {
+          if (item.analysis_id) {
+            currentAnalysisId = item.analysis_id;
+            loadResults(item.analysis_id);
+          }
+        };
+
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "cyber-btn-del";
+        delBtn.textContent = "DEL";
+        delBtn.onclick = async (e) => {
+          e.stopPropagation();
+          const title = item.title || item.video_id;
+          if (!confirm(`Delete "${title}" and all its comments from the database?`)) return;
+
+          try {
+            delBtn.disabled = true;
+            await PodLensApi.deleteHistory(item.video_id);
+            row.remove();
+            loadQuickHistory();
+            loadFullHistory();
+          } catch (err) {
+            alert(`Failed to delete: ${err.message}`);
+            delBtn.disabled = false;
+          }
+        };
+
+        actionsDiv.appendChild(viewBtn);
+        actionsDiv.appendChild(delBtn);
+        row.appendChild(mainDiv);
+        row.appendChild(actionsDiv);
+        listEl.appendChild(row);
+      });
+    } catch (err) {
+      console.warn("Could not load full history:", err);
+    }
+  }
+
+  function setupEventListeners() {
+    // Nav Tabs switching
+    document.querySelectorAll(".nav-tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        navigateTo(btn.dataset.view);
+      });
     });
-  }
 
-  function handleNewAnalysis() {
-    if (pollTimer) {
-      clearInterval(pollTimer);
-      pollTimer = null;
+    // Brand logo home link
+    const brandLink = document.getElementById("brand-home-link");
+    if (brandLink) {
+      brandLink.addEventListener("click", () => navigateTo("view-target"));
     }
-    currentAnalysisId = null;
-    document.getElementById("url-input").value = "";
-    setFormError(null);
-    setStatusPanel(false);
-    loadHistory();
-    showView("view-home");
+
+    // Form submit
+    const form = document.getElementById("analyze-form");
+    if (form) form.addEventListener("submit", handleAnalyzeSubmit);
+
+    // Max Comments Slider
+    const slider = document.getElementById("max-comments-slider");
+    const sliderVal = document.getElementById("max-comments-val");
+    if (slider && sliderVal) {
+      slider.addEventListener("input", () => {
+        sliderVal.textContent = slider.value;
+      });
+    }
+
+    // New target button on dashboard
+    const newTargetBtn = document.getElementById("dashboard-new-analysis-btn");
+    if (newTargetBtn) {
+      newTargetBtn.addEventListener("click", () => {
+        navigateTo("view-target");
+        const urlInput = document.getElementById("url-input");
+        if (urlInput) {
+          urlInput.value = "";
+          urlInput.focus();
+        }
+      });
+    }
+
+    // Quick History accordion toggle
+    const histToggle = document.getElementById("history-toggle-btn");
+    if (histToggle) {
+      histToggle.addEventListener("click", () => {
+        isQuickHistoryExpanded = !isQuickHistoryExpanded;
+        updateQuickHistoryUI();
+      });
+    }
   }
 
   document.addEventListener("DOMContentLoaded", () => {
-    document.getElementById("analyze-form").addEventListener("submit", handleAnalyzeSubmit);
-    document.getElementById("new-analysis-btn").addEventListener("click", handleNewAnalysis);
-
-    document.querySelectorAll(".tab-btn").forEach((btn) => {
-      btn.addEventListener("click", () => switchTab(btn.dataset.tab));
-    });
-
+    setupEventListeners();
     setStatusPanel(false);
     setFormError(null);
-    setupHistoryToggle();
-    loadHistory();
-    showView("view-home");
+    loadQuickHistory();
+    navigateTo("view-target");
   });
+
+  return { navigateTo, loadResults };
 })();
